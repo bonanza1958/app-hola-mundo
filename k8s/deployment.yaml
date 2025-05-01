@@ -1,0 +1,19 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hola-mundo
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: hola-mundo
+  template:
+    metadata:
+      labels:
+        app: hola-mundo
+    spec:
+      containers:
+      - name: nginx
+        image: REEMPLAZAR_CON_TU_IMAGEN
+        ports:
+        - containerPort: 80
