@@ -9,7 +9,9 @@ pipeline {
   stages {
     stage('Clonar repo') {
       steps {
-        git 'git@github.com:bonanza1958/app-hola-mundo.git'
+        container('git-ssh') {
+          git 'git@github.com:bonanza1958/app-hola-mundo.git'
+        }
       }
     }
 
