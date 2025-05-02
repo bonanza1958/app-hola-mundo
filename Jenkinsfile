@@ -12,25 +12,28 @@ spec:
   containers:
   - name: git-ssh
     image: alpine/git
-    command:
-    - cat
+    command: ['cat']
     tty: true
     volumeMounts:
     - name: git-ssh-key
       mountPath: /root/.ssh
+    - name: ssh-known-hosts
+      mountPath: /root/.ssh/known_hosts
+      subPath: known_hosts
+
   - name: kaniko
-    image: gcr.io/kaniko-project/executor:latest
-    command:
-    - cat
+    image: gcr.io/kaniko-project/executor:debug
+    command: ['cat']
     tty: true
     volumeMounts:
     - name: docker-config
       mountPath: /kaniko/.docker
+
   - name: kubectl
     image: bitnami/kubectl:latest
-    command:
-    - cat
+    command: ['cat']
     tty: true
+
   volumes:
   - name: git-ssh-key
     secret:
@@ -38,9 +41,6 @@ spec:
   - name: ssh-known-hosts
     configMap:
       name: ssh-known-hosts
-      items:
-      - key: known_hosts
-        path: known_hosts
   - name: docker-config
     secret:
       secretName: docker-config-secret
