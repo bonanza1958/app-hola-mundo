@@ -1,82 +1,90 @@
-import org.csanchez.jenkins.plugins.kubernetes.*
-
-podTemplate(
-  label: 'jenkins-k8s-agent',
-  containers: [
-    containerTemplate(
-      name: 'git-ssh',
-      image: 'alpine/git',
-      command: 'cat',
-      ttyEnabled: true,
-      volumeMounts: [
-        volumeMount(mountPath: '/root/.ssh', name: 'git-ssh-key'),
-        volumeMount(mountPath: '/root/.ssh/known_hosts', name: 'ssh-known-hosts', subPath: 'known_hosts')
-      ]
-    ),
-    containerTemplate(
-      name: 'kaniko',
-      image: 'gcr.io/kaniko-project/executor:latest',
-      command: '/busybox/cat',
-      ttyEnabled: true,
-      volumeMounts: [
-        volumeMount(mountPath: '/kaniko/.docker', name: 'docker-config')
-      ]
-    ),
-    containerTemplate(
-      name: 'kubectl',
-      image: 'bitnami/kubectl:latest',
-      command: 'cat',
-      ttyEnabled: true,
-      volumeMounts: [
-        // monta tu kubeconfig si lo tienes en un Secret, o confías en el ServiceAccount
-      ]
-    )
-  ],
-  volumes: [
-    secretVolume(secretName: 'git-ssh-key', mountPath: '/root/.ssh'),
-    secretVolume(secretName: 'ssh-known-hosts', mountPath: '/root/.ssh', readOnly: true),
-    secretVolume(secretName: 'docker-config-secret', mountPath: '/kaniko/.docker', readOnly: true)
-  ]
-) {
-  pipeline {
-    agent {
+pipeline {
+  agent {
+    kubernetes {
       label 'jenkins-k8s-agent'
+      yaml """
+apiVersion: v1
+kind: Pod
+metadata:
+  labels:
+    jenkins/label: jenkins-k8s-agent
+spec:
+  containers:
+  - name: git-ssh
+    image: alpine/git
+    command:
+    - cat
+    tty: true
+    volumeMounts:
+    - name: git-ssh-key
+      mountPath: /root/.ssh
+  - name: kaniko
+    image: gcr.io/kaniko-project/executor:latest
+    command:
+    - /busybox/cat
+    tty: true
+    volumeMounts:
+    - name: docker-config
+      mountPath: /kaniko/.docker
+  - name: kubectl
+    image: bitnami/kubectl:latest
+    command:
+    - cat
+    tty: true
+  volumes:
+  - name: git-ssh-key
+    secret:
+      secretName: git-ssh-key
+  - name: ssh-known-hosts
+    configMap:
+      name: ssh-known-hosts
+      items:
+      - key: known_hosts
+        path: known_hosts
+  - name: docker-config
+    secret:
+      secretName: docker-config-secret
+"""
     }
-    environment {
-      IMAGE = "guillemetal/app-hola-mundo:latest"
+  }
+
+  environment {
+    IMAGE = "docker.io/guillemetal/app-hola-mundo:latest"
+  }
+
+  stages {
+    stage('Clonar repo') {
+      steps {
+        container('git-ssh') {
+          sh '''
+            chmod 600 /root/.ssh/id_rsa
+            ssh-keyscan github.com >> /root/.ssh/known_hosts
+          '''
+          git credentialsId: 'git-ssh', url: 'git@github.com:bonanza1958/app-hola-mundo.git'
+        }
+      }
     }
-    stages {
-      stage('Clonar repo') {
-        steps {
-          container('git-ssh') {
-            // Configura tu SSH
+
+    stage('Build y Push con Kaniko') {
+      steps {
+        container('kaniko') {
+          withEnv(["DOCKER_CONFIG=/kaniko/.docker"]) {
             sh '''
-              chmod 600 /root/.ssh/id_rsa
+              /kaniko/executor \
+                --context `pwd` \
+                --dockerfile `pwd`/Dockerfile \
+                --destination=$IMAGE \
+                --verbosity=info
             '''
-            git credentialsId: 'git-ssh', url: 'git@github.com:bonanza1958/app-hola-mundo.git'
           }
         }
       }
-      stage('Build y Push con Kaniko') {
-        steps {
-          container('kaniko') {
-            withEnv(["DOCKER_CONFIG=/kaniko/.docker"]) {
-              sh '''
-                /kaniko/executor \
-                  --context `pwd` \
-                  --dockerfile `pwd`/Dockerfile \
-                  --destination=$IMAGE \
-                  --verbosity=info
-              '''
-            }
-          }
-        }
-      }
-      stage('Desplegar en Kubernetes') {
-        steps {
-          container('kubectl') {
-            sh 'kubectl set image deployment/hola-mundo nginx=$IMAGE -n default'
-          }
+    }
+
+    stage('Desplegar en Kubernetes') {
+      steps {
+        container('kubectl') {
+          sh 'kubectl set image deployment/hola-mundo nginx=$IMAGE -n default'
         }
       }
     }
