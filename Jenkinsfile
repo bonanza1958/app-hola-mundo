@@ -4,11 +4,13 @@ podTemplate(
     containerTemplate(
       name: 'git-ssh',
       image: 'alpine/git',
-      command: '/bin/sh',
-      ttyEnabled: true,
+      command: 'sleep',
+      args: 'infinity',
+      tty: true,
       volumeMounts: [
-        [ mountPath: '/root/.ssh', name: 'git-ssh-key' ],
-        [ mountPath: '/root/.ssh/known_hosts', name: 'ssh-known-hosts', subPath: 'known_hosts' ]
+        // Montar el Secret en una ruta alternativa
+        [ mountPath: '/tmp/.ssh', name: 'git-ssh-key' ],
+        [ mountPath: '/tmp/known_hosts', name: 'ssh-known-hosts', subPath: 'known_hosts' ]
       ]
     ),
     containerTemplate(
@@ -23,49 +25,33 @@ podTemplate(
     containerTemplate(
       name: 'kubectl',
       image: 'bitnami/kubectl:latest',
-      command: 'cat',
-      ttyEnabled: true
+      command: 'sleep',
+      args: 'infinity',
+      volumeMounts: [
+        [ mountPath: '/root/.kube', name: 'kube-config-secret' ]
+      ]
     )
   ],
   volumes: [
-    secretVolume(secretName: 'git-ssh-key', mountPath: '/root/.ssh'),
-    secretVolume(secretName: 'ssh-known-hosts', mountPath: '/root/.ssh', readOnly: true),
-    secretVolume(secretName: 'docker-config-secret', mountPath: '/kaniko/.docker', readOnly: true)
+    secretVolume(secretName: 'git-ssh-key', mountPath: '/tmp/.ssh'),
+    secretVolume(secretName: 'ssh-known-hosts', mountPath: '/tmp/known_hosts'),
+    secretVolume(secretName: 'docker-config-secret', mountPath: '/kaniko/.docker'),
+    secretVolume(secretName: 'kube-config-secret', mountPath: '/root/.kube')
   ]
 ) {
   node('jenkins-k8s-agent') {
     stage('Clonar repo') {
       container('git-ssh') {
-        sh 'chmod 600 /root/.ssh/id_rsa'
-        git credentialsId: 'git-ssh', url: 'git@github.com:bonanza1958/app-hola-mundo.git'
+        sh '''
+          // Copiar las claves a /root/.ssh y asignar permisos
+          mkdir -p /root/.ssh
+          cp /tmp/.ssh/id_rsa /root/.ssh/id_rsa
+          cp /tmp/known_hosts /root/.ssh/known_hosts
+          chmod 600 /root/.ssh/id_rsa
+        '''
+        git url: 'git@github.com:bonanza1958/app-hola-mundo.git'
       }
     }
-
-    stage('Verificar Docker config') {
-      container('kaniko') {
-        sh 'ls -l /kaniko/.docker'
-        sh 'cat /kaniko/.docker/config.json || echo "Archivo no encontrado"'
-      }
-    }
-
-    stage('Build y Push con Kaniko') {
-      container('kaniko') {
-        withEnv(["DOCKER_CONFIG=/kaniko/.docker"]) {
-          sh '''
-            /kaniko/executor \
-              --context `pwd` \
-              --dockerfile `pwd`/Dockerfile \
-              --destination=guillemetal/app-hola-mundo:latest \
-              --verbosity=info
-          '''
-        }
-      }
-    }
-
-    stage('Desplegar en Kubernetes') {
-      container('kubectl') {
-        sh 'kubectl set image deployment/hola-mundo nginx=guillemetal/app-hola-mundo:latest -n default'
-      }
-    }
+    // ... (etapas posteriores)
   }
 }
