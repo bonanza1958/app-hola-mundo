@@ -14,12 +14,11 @@ podTemplate(
     containerTemplate(
       name: 'kaniko',
       image: 'gcr.io/kaniko-project/executor:debug',
-      command: '/kaniko/executor',
-      args: ['--help'],
-      ttyEnabled: true,
+      command: 'sleep',
+      args: 'infinity',
       volumeMounts: [
-        [ mountPath: '/kaniko/.docker', name: 'docker-config' ]
-      ]
+        [ mountPath: '/kaniko/.docker', name: 'docker-config-secret' ]  // ¡Nombre exacto del Secret!
+  ]
     ),
     containerTemplate(
       name: 'kubectl',
