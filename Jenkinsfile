@@ -1,38 +1,83 @@
-pipeline {
-  agent any
+import org.csanchez.jenkins.plugins.kubernetes.*
 
-  environment {
-    IMAGE = "guillemetal/app-hola-mundo:latest"
-    REGISTRY = "docker.io"
-  }
-
-  stages {
-    stage('Clonar repo') {
-      steps {
-        container('git-ssh') {
-          git 'git@github.com:bonanza1958/app-hola-mundo.git'
+podTemplate(
+  label: 'jenkins-k8s-agent',
+  containers: [
+    containerTemplate(
+      name: 'git-ssh',
+      image: 'alpine/git',
+      command: 'cat',
+      ttyEnabled: true,
+      volumeMounts: [
+        volumeMount(mountPath: '/root/.ssh', name: 'git-ssh-key'),
+        volumeMount(mountPath: '/root/.ssh/known_hosts', name: 'ssh-known-hosts', subPath: 'known_hosts')
+      ]
+    ),
+    containerTemplate(
+      name: 'kaniko',
+      image: 'gcr.io/kaniko-project/executor:latest',
+      command: '/busybox/cat',
+      ttyEnabled: true,
+      volumeMounts: [
+        volumeMount(mountPath: '/kaniko/.docker', name: 'docker-config')
+      ]
+    ),
+    containerTemplate(
+      name: 'kubectl',
+      image: 'bitnami/kubectl:latest',
+      command: 'cat',
+      ttyEnabled: true,
+      volumeMounts: [
+        // monta tu kubeconfig si lo tienes en un Secret, o confías en el ServiceAccount
+      ]
+    )
+  ],
+  volumes: [
+    secretVolume(secretName: 'git-ssh-key', mountPath: '/root/.ssh'),
+    secretVolume(secretName: 'ssh-known-hosts', mountPath: '/root/.ssh', readOnly: true),
+    secretVolume(secretName: 'docker-config-secret', mountPath: '/kaniko/.docker', readOnly: true)
+  ]
+) {
+  pipeline {
+    agent {
+      label 'jenkins-k8s-agent'
+    }
+    environment {
+      IMAGE = "guillemetal/app-hola-mundo:latest"
+    }
+    stages {
+      stage('Clonar repo') {
+        steps {
+          container('git-ssh') {
+            // Configura tu SSH
+            sh '''
+              chmod 600 /root/.ssh/id_rsa
+            '''
+            git credentialsId: 'git-ssh', url: 'git@github.com:bonanza1958/app-hola-mundo.git'
+          }
         }
       }
-    }
-
-    stage('Build imagen Docker') {
-      steps {
-        sh 'docker build -t $IMAGE .'
-      }
-    }
-
-    stage('Push a DockerHub') {
-      steps {
-        withCredentials([usernamePassword(credentialsId: 'dockerhub-creds', usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {
-          sh 'echo $DOCKER_PASS | docker login -u $DOCKER_USER --password-stdin'
-          sh 'docker push $IMAGE'
+      stage('Build y Push con Kaniko') {
+        steps {
+          container('kaniko') {
+            withEnv(["DOCKER_CONFIG=/kaniko/.docker"]) {
+              sh '''
+                /kaniko/executor \
+                  --context `pwd` \
+                  --dockerfile `pwd`/Dockerfile \
+                  --destination=$IMAGE \
+                  --verbosity=info
+              '''
+            }
+          }
         }
       }
-    }
-
-    stage('Desplegar en Kubernetes') {
-      steps {
-        sh 'kubectl set image deployment/hola-mundo nginx=$IMAGE -n default'
+      stage('Desplegar en Kubernetes') {
+        steps {
+          container('kubectl') {
+            sh 'kubectl set image deployment/hola-mundo nginx=$IMAGE -n default'
+          }
+        }
       }
     }
   }
