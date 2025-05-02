@@ -15,13 +15,16 @@ podTemplate(
       ]
     ),
     containerTemplate(
-      name: 'kaniko',
-      image: 'gcr.io/kaniko-project/executor:debug',
-      ttyEnabled: true,
-      volumeMounts: [
-        volumeMount(mountPath: '/kaniko/.docker', name: 'docker-config')
-      ]
-    ),
+     name: 'kaniko',
+     image: 'gcr.io/kaniko-project/executor:debug',
+     command: '/kaniko/executor',
+     args: ['--help'], // Solo para que el contenedor arranque, luego lo sobreescribís en tu `sh`
+     ttyEnabled: true,
+     volumeMounts: [
+       volumeMount(mountPath: '/kaniko/.docker', name: 'docker-config')
+  ]
+   ),
+
     containerTemplate(
       name: 'kubectl',
       image: 'bitnami/kubectl:latest',
