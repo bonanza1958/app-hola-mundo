@@ -7,7 +7,6 @@ podTemplate(
       name: 'git-ssh',
       image: 'alpine/git',
       command: '/bin/sh',
-
       ttyEnabled: true,
       volumeMounts: [
         volumeMount(mountPath: '/root/.ssh', name: 'git-ssh-key'),
@@ -15,16 +14,15 @@ podTemplate(
       ]
     ),
     containerTemplate(
-     name: 'kaniko',
-     image: 'gcr.io/kaniko-project/executor:debug',
-     command: '/kaniko/executor',
-     args: ['--help'], // Solo para que el contenedor arranque, luego lo sobreescribís en tu `sh`
-     ttyEnabled: true,
-     volumeMounts: [
-       volumeMount(mountPath: '/kaniko/.docker', name: 'docker-config')
-  ]
-   ),
-
+      name: 'kaniko',
+      image: 'gcr.io/kaniko-project/executor:debug',
+      command: '/kaniko/executor',
+      args: ['--help'],
+      ttyEnabled: true,
+      volumeMounts: [
+        volumeMount(mountPath: '/kaniko/.docker', name: 'docker-config')
+      ]
+    ),
     containerTemplate(
       name: 'kubectl',
       image: 'bitnami/kubectl:latest',
@@ -38,45 +36,31 @@ podTemplate(
     secretVolume(secretName: 'docker-config-secret', mountPath: '/kaniko/.docker', readOnly: true)
   ]
 ) {
-  pipeline {
-    agent {
-      label 'jenkins-k8s-agent'
+  node('jenkins-k8s-agent') {
+    stage('Clonar repo') {
+      container('git-ssh') {
+        sh 'chmod 600 /root/.ssh/id_rsa'
+        git credentialsId: 'git-ssh', url: 'git@github.com:bonanza1958/app-hola-mundo.git'
+      }
     }
-    environment {
-      IMAGE = "guillemetal/app-hola-mundo:latest"
-    }
-    stages {
-      stage('Clonar repo') {
-        steps {
-          container('git-ssh') {
-            sh '''
-              chmod 600 /root/.ssh/id_rsa
-            '''
-            git credentialsId: 'git-ssh', url: 'git@github.com:bonanza1958/app-hola-mundo.git'
-          }
+
+    stage('Build y Push con Kaniko') {
+      container('kaniko') {
+        withEnv(["DOCKER_CONFIG=/kaniko/.docker"]) {
+          sh '''
+            /kaniko/executor \
+              --context `pwd` \
+              --dockerfile `pwd`/Dockerfile \
+              --destination=guillemetal/app-hola-mundo:latest \
+              --verbosity=info
+          '''
         }
       }
-      stage('Build y Push con Kaniko') {
-        steps {
-          container('kaniko') {
-            withEnv(["DOCKER_CONFIG=/kaniko/.docker"]) {
-              sh '''
-                /kaniko/executor \
-                  --context `pwd` \
-                  --dockerfile `pwd`/Dockerfile \
-                  --destination=$IMAGE \
-                  --verbosity=info
-              '''
-            }
-          }
-        }
-      }
-      stage('Desplegar en Kubernetes') {
-        steps {
-          container('kubectl') {
-            sh 'kubectl set image deployment/hola-mundo nginx=$IMAGE -n default'
-          }
-        }
+    }
+
+    stage('Desplegar en Kubernetes') {
+      container('kubectl') {
+        sh 'kubectl set image deployment/hola-mundo nginx=guillemetal/app-hola-mundo:latest -n default'
       }
     }
   }
