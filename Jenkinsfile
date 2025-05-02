@@ -1,5 +1,3 @@
-import org.csanchez.jenkins.plugins.kubernetes.*
-
 podTemplate(
   label: 'jenkins-k8s-agent',
   containers: [
@@ -9,8 +7,8 @@ podTemplate(
       command: '/bin/sh',
       ttyEnabled: true,
       volumeMounts: [
-        volumeMount(mountPath: '/root/.ssh', name: 'git-ssh-key'),
-        volumeMount(mountPath: '/root/.ssh/known_hosts', name: 'ssh-known-hosts', subPath: 'known_hosts')
+        [ mountPath: '/root/.ssh', name: 'git-ssh-key' ],
+        [ mountPath: '/root/.ssh/known_hosts', name: 'ssh-known-hosts', subPath: 'known_hosts' ]
       ]
     ),
     containerTemplate(
@@ -20,7 +18,7 @@ podTemplate(
       args: ['--help'],
       ttyEnabled: true,
       volumeMounts: [
-        volumeMount(mountPath: '/kaniko/.docker', name: 'docker-config')
+        [ mountPath: '/kaniko/.docker', name: 'docker-config' ]
       ]
     ),
     containerTemplate(
