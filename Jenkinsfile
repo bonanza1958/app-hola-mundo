@@ -17,8 +17,8 @@ podTemplate(
       command: 'sleep',
       args: 'infinity',
       volumeMounts: [
-        [ mountPath: '/kaniko/.docker', name: 'docker-config-secret' ]  // ¡Nombre exacto del Secret!
-  ]
+        [ mountPath: '/kaniko/.docker', name: 'docker-config-secret' ]
+      ]
     ),
     containerTemplate(
       name: 'kubectl',
@@ -38,6 +38,13 @@ podTemplate(
       container('git-ssh') {
         sh 'chmod 600 /root/.ssh/id_rsa'
         git credentialsId: 'git-ssh', url: 'git@github.com:bonanza1958/app-hola-mundo.git'
+      }
+    }
+
+    stage('Verificar Docker config') {
+      container('kaniko') {
+        sh 'ls -l /kaniko/.docker'
+        sh 'cat /kaniko/.docker/config.json || echo "Archivo no encontrado"'
       }
     }
 
