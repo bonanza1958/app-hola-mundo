@@ -1,0 +1,11 @@
+apiVersion: v1
+data:
+  config.json: ewogICJhdXRocyI6IHsKICAgICJodHRwczovL2luZGV4LmRvY2tlci5pby92MS8iOiB7CiAgICAgICJ1c2VybmFtZSI6ICJndWlsbGVtZXRhbCIsCiAgICAgICJwYXNzd29yZCI6ICJkY2tyX3BhdF81N1RGcW9QSTVTaVdSMkx4dXY5dlhwaEluUFUiCiAgICB9CiAgfQp9Cg==
+kind: Secret
+metadata:
+  creationTimestamp: "2025-05-03T02:16:42Z"
+  name: docker-config
+  namespace: jenkins
+  resourceVersion: "4610537"
+  uid: 1810695e-5d0e-4b8d-881e-3a20a2f3fddb
+type: Opaque
